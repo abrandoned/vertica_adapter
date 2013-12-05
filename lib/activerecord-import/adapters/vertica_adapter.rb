@@ -1,6 +1,3 @@
-module ActiveRecord::Import; end
-
 module ActiveRecord::Import::VerticaAdapter
-  module InstanceMethods
-  end
+  include ActiveRecord::Import::ImportSupport
 end
