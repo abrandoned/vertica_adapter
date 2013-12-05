@@ -28,12 +28,6 @@ module ActiveRecord
         raise ArgumentError, "No database specified. Missing argument: database."
       end
 
-      # if config.has_key?(:schema)
-      #   schema = config[:schema]
-      # else
-      #   raise ArgumentError, "Vertica Schema must be specified."
-      # end
-
       conn = Vertica.connect({ :user => username, 
                                :password => password, 
                                :host => host, 
@@ -45,44 +39,18 @@ module ActiveRecord
 
       ConnectionAdapters::VerticaAdapter.new(conn, options, config)
     end  
-
-
-    # def self.instantiate(record)
-    #   record.stringify_keys!    
-    #   model = find_sti_class(record[inheritance_column]).allocate
-    #   model.init_with('attributes' => record)
-
-    #   # if ActiveRecord::IdentityMap.enabled? && record_id
-    #   #   if (column = sti_class.columns_hash[sti_class.primary_key]) && column.number?
-    #   #     record_id = record_id.to_i
-    #   #   end
-    #   #   if instance = IdentityMap.get(sti_class, record_id)
-    #   #     instance.reinit_with('attributes' => record)
-    #   #   else
-    #   #     instance = sti_class.allocate.init_with('attributes' => record)
-    #   #     IdentityMap.add(instance)
-    #   #   end
-    #   # else
-    #   # Kernel.p record
-    #   # end
-
-    #   model
-    # end
-
   end
-  
+
   module ConnectionAdapters
     class VerticaColumn < Column
-      
     end
-    
+
     class VerticaAdapter < AbstractAdapter
       ADAPTER_NAME = 'Vertica'.freeze
 
-      def adapter_name #:nodoc:
-        ADAPTER_NAME
-      end
-
+      ##
+      # Constructor
+      #
       def initialize(connection, connection_options, config)
         super(connection)
         @connection_options, @config = connection_options, config
@@ -90,20 +58,34 @@ module ActiveRecord
         # connect
       end
 
+      ##
+      # Instance Methods
+      #
       def active?
         @connection.opened?
       end
-      
-      # Disconnects from the database if already connected, and establishes a
-      # new connection with the database.
-      def reconnect!
-        @connection.reset_connection
+
+      def adapter_name #:nodoc:
+        ADAPTER_NAME
       end
 
-      def reset
-        reconnect!
+      def columns(table_name, name = nil) #:nodoc:
+        sql = "SELECT * FROM columns WHERE table_name = #{quote_column_name(table_name)} AND table_schema = #{quote_column_name(schema_name)}"
+
+        columns = []
+
+        execute(sql, name) do |field|
+          columns << VerticaColumn.new(
+            field[:column_name],
+            field[:column_default],
+            field[:data_type],
+            field[:is_nullable]
+          )
+        end
+
+        columns
       end
-      
+
       # Close the connection.
       def disconnect!
         @connection.close rescue nil
@@ -125,34 +107,6 @@ module ActiveRecord
         end
       end
 
-      def schema_name
-        @schema ||= @connection.options[:schema]
-      end
-
-      def tables(name = nil) #:nodoc:
-        sql = "SELECT * FROM tables WHERE table_schema = #{quote_column_name(schema_name)}"
-
-        tables = []
-        execute(sql, name) { |field| tables << field[:table_name] }
-        tables
-      end
-
-      def columns(table_name, name = nil)#:nodoc:
-        sql = "SELECT * FROM columns WHERE table_name = #{quote_column_name(table_name)} AND table_schema = #{quote_column_name(schema_name)}"
-
-        columns = []
-        execute(sql, name){ |field| columns << VerticaColumn.new(field[:column_name],field[:column_default],field[:data_type],field[:is_nullable])}
-        columns
-      end
-
-      def select(sql, name = nil, binds = [])
-        rows = []
-        @connection = ::Vertica.connect(@connection.options)
-        @connection.query(sql) {|row| rows << row }
-        @connection.close
-        rows
-      end
-
       def primary_key(table)
         ''
       end
@@ -169,7 +123,36 @@ module ActiveRecord
           "#{schema_name}.#{name}"
         end
       end
-      
+
+      # Disconnects from the database if already connected, and establishes a
+      # new connection with the database.
+      def reconnect!
+        @connection.reset_connection
+      end
+
+      def reset
+        reconnect!
+      end
+
+      def schema_name
+        @schema ||= @connection.options[:schema]
+      end
+
+      def select(sql, name = nil, binds = [])
+        rows = []
+        @connection = ::Vertica.connect(@connection.options)
+        @connection.query(sql) {|row| rows << row }
+        @connection.close
+        rows
+      end
+
+      def tables(name = nil) #:nodoc:
+        sql = "SELECT * FROM tables WHERE table_schema = #{quote_column_name(schema_name)}"
+
+        tables = []
+        execute(sql, name) { |field| tables << field[:table_name] }
+        tables
+      end
     end  
   end
 end
